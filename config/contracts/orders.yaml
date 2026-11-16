@@ -1,0 +1,71 @@
+# Data contract: Olist orders (one row per order)
+dataset: orders
+version: 1
+timestamp_format: "%Y-%m-%d %H:%M:%S"
+
+columns:
+  order_id:                      { type: string,    required: true }
+  customer_id:                   { type: string,    required: true }
+  order_status:                  { type: string,    required: true }
+  order_purchase_timestamp:      { type: timestamp, required: true }
+  order_approved_at:             { type: timestamp, required: false }
+  order_delivered_carrier_date:  { type: timestamp, required: false }
+  order_delivered_customer_date: { type: timestamp, required: false }
+  order_estimated_delivery_date: { type: timestamp, required: true }
+
+row_rules:
+  - id: OR001
+    name: required_fields_present
+    check: not_null
+    columns: [order_id, customer_id, order_status, order_purchase_timestamp, order_estimated_delivery_date]
+    severity: reject
+
+  - id: OR002
+    name: unique_order_id
+    check: unique
+    columns: [order_id]
+    severity: reject
+
+  - id: OR003
+    name: status_is_valid
+    check: allowed_values
+    column: order_status
+    values: [delivered, shipped, canceled, unavailable, invoiced, processing, created, approved]
+    severity: reject
+
+  - id: OR004
+    name: timestamps_are_valid
+    check: timestamp_format
+    columns: [order_purchase_timestamp, order_approved_at, order_delivered_carrier_date,
+              order_delivered_customer_date, order_estimated_delivery_date]
+    severity: reject
+
+  - id: OR005
+    name: purchase_in_dataset_window
+    check: date_between
+    column: order_purchase_timestamp
+    min: "2016-01-01"
+    max: "2018-12-31"
+    severity: warn
+
+  - id: OR006
+    name: delivered_orders_have_delivery_date
+    check: required_if
+    column: order_delivered_customer_date
+    when_column: order_status
+    when_values: [delivered]
+    severity: warn
+
+file_rules:
+  - id: OR100
+    name: expected_volume
+    check: row_count_between
+    min: 90000
+    max: 110000
+    severity: warn
+
+  - id: OR101
+    name: max_reject_rate
+    check: reject_rate_below
+    max_rate: 0.01
+    severity: warn

@@ -1,0 +1,10 @@
+dataset: category_translation
+version: 1
+columns:
+  product_category_name:         { type: string, required: true }
+  product_category_name_english: { type: string, required: true }
+row_rules:
+  - { id: CT001, name: required_fields_present, check: not_null, columns: [product_category_name, product_category_name_english], severity: reject }
+  - { id: CT002, name: unique_category, check: unique, columns: [product_category_name], severity: reject }
+file_rules:
+  - { id: CT100, name: expected_volume, check: row_count_between, min: 60, max: 100, severity: warn }

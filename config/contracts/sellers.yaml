@@ -1,0 +1,14 @@
+dataset: sellers
+version: 1
+columns:
+  seller_id:              { type: string, required: true }
+  seller_zip_code_prefix: { type: string, required: true }
+  seller_city:            { type: string, required: true }
+  seller_state:           { type: string, required: true }
+row_rules:
+  - { id: SE001, name: required_fields_present, check: not_null, columns: [seller_id, seller_zip_code_prefix, seller_state], severity: reject }
+  - { id: SE002, name: unique_seller_id, check: unique, columns: [seller_id], severity: reject }
+  - { id: SE003, name: state_is_valid, check: allowed_values, column: seller_state, values: [AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO], severity: reject }
+file_rules:
+  - { id: SE100, name: expected_volume, check: row_count_between, min: 2500, max: 4000, severity: warn }
+  - { id: SE101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }

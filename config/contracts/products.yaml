@@ -1,0 +1,21 @@
+dataset: products
+version: 1
+columns:
+  product_id:                 { type: string,  required: true }
+  product_category_name:      { type: string,  required: false }
+  product_name_lenght:        { type: integer, required: false }
+  product_description_lenght: { type: integer, required: false }
+  product_photos_qty:         { type: integer, required: false }
+  product_weight_g:           { type: decimal, required: false }
+  product_length_cm:          { type: decimal, required: false }
+  product_height_cm:          { type: decimal, required: false }
+  product_width_cm:           { type: decimal, required: false }
+row_rules:
+  - { id: PR001, name: product_id_present, check: not_null, columns: [product_id], severity: reject }
+  - { id: PR002, name: unique_product_id, check: unique, columns: [product_id], severity: reject }
+  - { id: PR003, name: measures_are_numeric, check: numeric, columns: [product_name_lenght, product_description_lenght, product_photos_qty, product_weight_g, product_length_cm, product_height_cm, product_width_cm], severity: reject }
+  - { id: PR004, name: category_present, check: not_null, columns: [product_category_name], severity: warn }
+  - { id: PR005, name: dimensions_present, check: not_null, columns: [product_weight_g, product_length_cm, product_height_cm, product_width_cm], severity: warn }
+file_rules:
+  - { id: PR100, name: expected_volume, check: row_count_between, min: 30000, max: 36000, severity: warn }
+  - { id: PR101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }

@@ -1,0 +1,17 @@
+dataset: geolocation
+version: 1
+columns:
+  geolocation_zip_code_prefix: { type: string,  required: true }
+  geolocation_lat:             { type: decimal, required: true }
+  geolocation_lng:             { type: decimal, required: true }
+  geolocation_city:            { type: string,  required: true }
+  geolocation_state:           { type: string,  required: true }
+row_rules:
+  - { id: GE001, name: required_fields_present, check: not_null, columns: [geolocation_zip_code_prefix, geolocation_lat, geolocation_lng, geolocation_state], severity: reject }
+  - { id: GE002, name: coordinates_are_numeric, check: numeric, columns: [geolocation_lat, geolocation_lng], severity: reject }
+  - { id: GE003, name: state_is_valid, check: allowed_values, column: geolocation_state, values: [AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO], severity: reject }
+  - { id: GE004, name: latitude_in_brazil, check: range, column: geolocation_lat, min_inclusive: -35, max_inclusive: 6, severity: warn }
+  - { id: GE005, name: longitude_in_brazil, check: range, column: geolocation_lng, min_inclusive: -75, max_inclusive: -34, severity: warn }
+file_rules:
+  - { id: GE100, name: expected_volume, check: row_count_between, min: 900000, max: 1100000, severity: warn }
+  - { id: GE101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }

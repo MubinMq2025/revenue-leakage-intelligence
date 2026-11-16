@@ -1,0 +1,19 @@
+dataset: reviews
+version: 1
+timestamp_format: "%Y-%m-%d %H:%M:%S"
+columns:
+  review_id:               { type: string,    required: true }
+  order_id:                { type: string,    required: true }
+  review_score:            { type: integer,   required: true }
+  review_comment_title:    { type: string,    required: false }
+  review_comment_message:  { type: string,    required: false }
+  review_creation_date:    { type: timestamp, required: true }
+  review_answer_timestamp: { type: timestamp, required: true }
+row_rules:
+  - { id: RV001, name: required_fields_present, check: not_null, columns: [review_id, order_id, review_score, review_creation_date], severity: reject }
+  - { id: RV002, name: unique_review_per_order, check: unique, columns: [review_id, order_id], severity: reject }
+  - { id: RV003, name: score_is_1_to_5, check: allowed_values, column: review_score, values: ["1", "2", "3", "4", "5"], severity: reject }
+  - { id: RV004, name: timestamps_are_valid, check: timestamp_format, columns: [review_creation_date, review_answer_timestamp], severity: reject }
+file_rules:
+  - { id: RV100, name: expected_volume, check: row_count_between, min: 90000, max: 110000, severity: warn }
+  - { id: RV101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }

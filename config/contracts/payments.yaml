@@ -1,0 +1,19 @@
+dataset: payments
+version: 1
+columns:
+  order_id:             { type: string,  required: true }
+  payment_sequential:   { type: integer, required: true }
+  payment_type:         { type: string,  required: true }
+  payment_installments: { type: integer, required: true }
+  payment_value:        { type: decimal, required: true }
+row_rules:
+  - { id: PA001, name: required_fields_present, check: not_null, columns: [order_id, payment_sequential, payment_type, payment_installments, payment_value], severity: reject }
+  - { id: PA002, name: unique_payment, check: unique, columns: [order_id, payment_sequential], severity: reject }
+  - { id: PA003, name: payment_type_known, check: allowed_values, column: payment_type, values: [credit_card, boleto, voucher, debit_card, not_defined], severity: reject }
+  - { id: PA004, name: payment_type_defined, check: allowed_values, column: payment_type, values: [credit_card, boleto, voucher, debit_card], severity: warn }
+  - { id: PA005, name: values_are_numeric, check: numeric, columns: [payment_sequential, payment_installments, payment_value], severity: reject }
+  - { id: PA006, name: value_not_negative, check: range, column: payment_value, min_inclusive: 0, severity: reject }
+  - { id: PA007, name: installments_at_least_one, check: range, column: payment_installments, min_inclusive: 1, severity: warn }
+file_rules:
+  - { id: PA100, name: expected_volume, check: row_count_between, min: 95000, max: 115000, severity: warn }
+  - { id: PA101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }

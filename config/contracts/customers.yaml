@@ -1,0 +1,16 @@
+dataset: customers
+version: 1
+columns:
+  customer_id:              { type: string, required: true }
+  customer_unique_id:       { type: string, required: true }
+  customer_zip_code_prefix: { type: string, required: true }
+  customer_city:            { type: string, required: true }
+  customer_state:           { type: string, required: true }
+row_rules:
+  - { id: CU001, name: required_fields_present, check: not_null, columns: [customer_id, customer_unique_id, customer_zip_code_prefix, customer_state], severity: reject }
+  - { id: CU002, name: unique_customer_id, check: unique, columns: [customer_id], severity: reject }
+  - { id: CU003, name: zip_is_numeric, check: numeric, columns: [customer_zip_code_prefix], severity: reject }
+  - { id: CU004, name: state_is_valid, check: allowed_values, column: customer_state, values: [AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO], severity: reject }
+file_rules:
+  - { id: CU100, name: expected_volume, check: row_count_between, min: 90000, max: 110000, severity: warn }
+  - { id: CU101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }

@@ -1,0 +1,22 @@
+dataset: order_items
+version: 1
+timestamp_format: "%Y-%m-%d %H:%M:%S"
+columns:
+  order_id:            { type: string,    required: true }
+  order_item_id:       { type: integer,   required: true }
+  product_id:          { type: string,    required: true }
+  seller_id:           { type: string,    required: true }
+  shipping_limit_date: { type: timestamp, required: true }
+  price:               { type: decimal,   required: true }
+  freight_value:       { type: decimal,   required: true }
+row_rules:
+  - { id: OI001, name: required_fields_present, check: not_null, columns: [order_id, order_item_id, product_id, seller_id, shipping_limit_date, price, freight_value], severity: reject }
+  - { id: OI002, name: unique_order_item, check: unique, columns: [order_id, order_item_id], severity: reject }
+  - { id: OI003, name: amounts_are_numeric, check: numeric, columns: [order_item_id, price, freight_value], severity: reject }
+  - { id: OI004, name: price_positive, check: range, column: price, min_exclusive: 0, max_inclusive: 100000, severity: reject }
+  - { id: OI005, name: freight_not_negative, check: range, column: freight_value, min_inclusive: 0, severity: reject }
+  - { id: OI006, name: timestamp_is_valid, check: timestamp_format, columns: [shipping_limit_date], severity: reject }
+  - { id: OI007, name: shipping_date_in_window, check: date_between, column: shipping_limit_date, min: "2016-01-01", max: "2018-12-31", severity: warn }
+file_rules:
+  - { id: OI100, name: expected_volume, check: row_count_between, min: 100000, max: 125000, severity: warn }
+  - { id: OI101, name: max_reject_rate, check: reject_rate_below, max_rate: 0.01, severity: warn }
