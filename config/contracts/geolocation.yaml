@@ -2,8 +2,8 @@ dataset: geolocation
 version: 1
 columns:
   geolocation_zip_code_prefix: { type: string,  required: true }
-  geolocation_lat:             { type: decimal, required: true }
-  geolocation_lng:             { type: decimal, required: true }
+  geolocation_lat:             { type: double,  required: true }
+  geolocation_lng:             { type: double,  required: true }
   geolocation_city:            { type: string,  required: true }
   geolocation_state:           { type: string,  required: true }
 row_rules:

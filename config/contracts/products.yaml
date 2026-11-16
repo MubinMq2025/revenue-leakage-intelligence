@@ -3,8 +3,8 @@ version: 1
 columns:
   product_id:                 { type: string,  required: true }
   product_category_name:      { type: string,  required: false }
-  product_name_lenght:        { type: integer, required: false }
-  product_description_lenght: { type: integer, required: false }
+  product_name_lenght:        { type: integer, required: false, rename_to: product_name_length }
+  product_description_lenght: { type: integer, required: false, rename_to: product_description_length }
   product_photos_qty:         { type: integer, required: false }
   product_weight_g:           { type: decimal, required: false }
   product_length_cm:          { type: decimal, required: false }
