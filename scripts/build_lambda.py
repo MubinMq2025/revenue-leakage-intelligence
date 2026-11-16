@@ -4,7 +4,7 @@ Build the Lambda deployment package: build/validator_lambda.zip
 What goes in the zip:
     handler.py                    (from lambda/)
     src/dq_platform/*.py          (the shared validation engine)
-    config/dq_rules.yaml          (the data contract)
+    config/contracts/*.yaml       (one data contract per table)
     yaml/                         (PyYAML, Linux build, since Lambda runs on Linux)
 
 pandas, numpy and boto3 are NOT bundled: they come from the AWS SDK for pandas
@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_DIR = REPO_ROOT / "build" / "lambda_package"
 ZIP_PATH = REPO_ROOT / "build" / "validator_lambda.zip"
 
-ENGINE_FILES = ["__init__.py", "rules.py", "validator.py", "outputs.py"]
+ENGINE_FILES = ["__init__.py", "tables.py", "rules.py", "validator.py", "outputs.py"]
 
 
 def main() -> None:
@@ -34,13 +34,15 @@ def main() -> None:
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
     (BUILD_DIR / "src" / "dq_platform").mkdir(parents=True)
-    (BUILD_DIR / "config").mkdir()
+    (BUILD_DIR / "config" / "contracts").mkdir(parents=True)
 
-    # 2. Copy our code and the rules contract
+    # 2. Copy our code and every table contract
     shutil.copy(REPO_ROOT / "lambda" / "handler.py", BUILD_DIR / "handler.py")
     for name in ENGINE_FILES:
         shutil.copy(REPO_ROOT / "src" / "dq_platform" / name, BUILD_DIR / "src" / "dq_platform" / name)
-    shutil.copy(REPO_ROOT / "config" / "dq_rules.yaml", BUILD_DIR / "config" / "dq_rules.yaml")
+    contracts = sorted((REPO_ROOT / "config" / "contracts").glob("*.yaml"))
+    for contract in contracts:
+        shutil.copy(contract, BUILD_DIR / "config" / "contracts" / contract.name)
 
     # 3. Install PyYAML built for Lambda's Linux environment (not for Windows)
     subprocess.run(
@@ -64,7 +66,7 @@ def main() -> None:
                 zf.write(path, path.relative_to(BUILD_DIR).as_posix())
 
     size_kb = ZIP_PATH.stat().st_size / 1024
-    print(f"Built {ZIP_PATH.relative_to(REPO_ROOT)} ({size_kb:.0f} KB)")
+    print(f"Built {ZIP_PATH.relative_to(REPO_ROOT)} ({size_kb:.0f} KB) with {len(contracts)} contracts")
 
 
 if __name__ == "__main__":

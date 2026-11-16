@@ -1,13 +1,13 @@
 """
-AWS Lambda entry point for the data quality validator.
+AWS Lambda entry point for the Olist data quality validator.
 
-Flow for each raw file:
-    1. Download the CSV from S3 (raw/ zone)
-    2. Run the shared validation engine (src/dq_platform/validator.py)
-    3. Upload valid rows, rejected rows and the JSON report to their S3 zones
+Flow for each raw file  raw/<table>/load_date=YYYY-MM-DD/<file>.csv :
+    1. Work out the table from the S3 key and pick its contract (config/contracts/<table>.yaml)
+    2. Download the CSV and run the shared validation engine (src/dq_platform/validator.py)
+    3. Upload usable rows, rejected rows and the JSON report to their S3 zones
 
 Accepted event shapes:
-    Manual test:        {"key": "raw/year=2026/month=11/day=08/transactions_...csv"}
+    Manual test:        {"key": "raw/orders/load_date=2026-11-16/olist_orders_dataset.csv"}
                         (optional "bucket"; defaults to the DATA_BUCKET env variable)
     S3 notification:    {"Records": [{"s3": {"bucket": {"name": ...}, "object": {"key": ...}}}]}
     EventBridge (S3):   {"detail": {"bucket": {"name": ...}, "object": {"key": ...}}}
@@ -27,21 +27,21 @@ import urllib.parse
 import boto3
 import pandas as pd
 
-from src.dq_platform.outputs import build_report, output_keys
-from src.dq_platform.rules import load_rules
+from src.dq_platform.outputs import ZONE_PREFIXES, build_report, output_keys
+from src.dq_platform.rules import load_all_contracts
+from src.dq_platform.tables import parse_raw_key
 from src.dq_platform.validator import validate
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 RAW_PREFIX = "raw/"
-ZONE_PREFIXES = {"validated": "validated/", "rejected": "rejected/", "dq_reports": "dq-reports/"}
-METRICS_NAMESPACE = "FinDQ"
+METRICS_NAMESPACE = "RLI/DataQuality"
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
 # Created once per Lambda container and reused across warm invocations (faster)
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-southeast-2"))
-RULES = load_rules()
+CONTRACTS = load_all_contracts()
 
 
 def extract_targets(event: dict) -> list[tuple[str, str]]:
@@ -75,7 +75,7 @@ def put_csv(bucket: str, key: str, df: pd.DataFrame) -> None:
     )
 
 
-def publish_metrics(source_key: str, report: dict) -> None:
+def publish_metrics(table: str, source_key: str, report: dict) -> None:
     """
     Emit data quality metrics using CloudWatch Embedded Metric Format (EMF).
 
@@ -87,20 +87,23 @@ def publish_metrics(source_key: str, report: dict) -> None:
             "Timestamp": int(time.time() * 1000),
             "CloudWatchMetrics": [{
                 "Namespace": METRICS_NAMESPACE,
-                "Dimensions": [["Environment"]],
+                "Dimensions": [["Environment", "Dataset"]],
                 "Metrics": [
                     {"Name": "TotalRows", "Unit": "Count"},
                     {"Name": "RejectedRows", "Unit": "Count"},
+                    {"Name": "FlaggedRows", "Unit": "Count"},
                     {"Name": "RejectRatePercent", "Unit": "Percent"},
                     {"Name": "Warnings", "Unit": "Count"},
                 ],
             }],
         },
-        # Dimension value
+        # Dimension values
         "Environment": ENVIRONMENT,
+        "Dataset": table,
         # Metric values
         "TotalRows": report["total_rows"],
         "RejectedRows": report["rejected_rows"],
+        "FlaggedRows": report["flagged_rows"],
         "RejectRatePercent": round(report["reject_rate"] * 100, 2),
         "Warnings": len(report["warnings"]),
         # Extra searchable context (not metrics)
@@ -112,14 +115,16 @@ def publish_metrics(source_key: str, report: dict) -> None:
 
 
 def process_file(bucket: str, key: str) -> dict:
-    """Validate one raw file and write its three outputs. Returns the report."""
-    logger.info("Processing s3://%s/%s", bucket, key)
+    """Validate one raw file with its table's contract and write its three outputs."""
+    table = parse_raw_key(key)["table"]
+    logger.info("Processing s3://%s/%s with contract '%s'", bucket, key, table)
 
     obj = s3.get_object(Bucket=bucket, Key=key)
     df = pd.read_csv(io.BytesIO(obj["Body"].read()), dtype=str, keep_default_na=False)
 
-    result = validate(df, RULES)
-    report = build_report(result, RULES, key)
+    rules = CONTRACTS[table]
+    result = validate(df, rules)
+    report = build_report(result, rules, key)
     keys = output_keys(key, ZONE_PREFIXES)
 
     put_csv(bucket, keys["validated"], result.valid)
@@ -133,7 +138,7 @@ def process_file(bucket: str, key: str) -> dict:
         ServerSideEncryption="AES256",
     )
 
-    publish_metrics(key, report)
+    publish_metrics(table, key, report)
     return report
 
 
@@ -146,6 +151,6 @@ def lambda_handler(event, context):
             skipped.append(key)
             continue
         report = process_file(bucket, key)
-        processed.append({k: report[k] for k in ("source_file", "status", "total_rows", "valid_rows", "rejected_rows")})
+        processed.append({k: report[k] for k in ("dataset", "source_file", "status", "total_rows", "rejected_rows", "flagged_rows")})
 
     return {"processed": processed, "skipped": skipped}
