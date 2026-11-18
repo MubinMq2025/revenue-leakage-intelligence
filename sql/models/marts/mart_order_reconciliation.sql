@@ -1,7 +1,7 @@
 -- mart_order_reconciliation: one row per order with its gap, reason code, impact and amount at risk.
+-- Materialized as a Parquet table by scripts/create_models.py (marts are tables, not views).
 -- Rules are checked IN ORDER; the first match wins. Tolerance: gaps within R$0.01 count as matched.
 -- Full definitions: docs/reason_codes.md
-CREATE OR REPLACE VIEW rli_dev_olist.mart_order_reconciliation AS
 WITH coded AS (
     SELECT
         t.*,
@@ -39,4 +39,4 @@ SELECT
         WHEN 'OVERPAID_OTHER'    THEN c.gap_amount
         ELSE 0
     END AS amount_at_risk
-FROM coded c;
+FROM coded c

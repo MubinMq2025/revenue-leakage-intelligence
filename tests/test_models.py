@@ -41,14 +41,36 @@ class FakeAthena:
 
 
 def test_layers_are_built_in_order():
-    layers = [f.parent.name for f in create_models.model_files()]
-    positions = [create_models.LAYERS.index(layer) for layer in layers]
+    layers = [f.parent.name for f, _ in create_models.model_files()]
+    positions = [create_models.LAYER_NAMES.index(layer) for layer in layers]
     assert positions == sorted(positions)    # dims, then facts, then recon, then marts
     assert layers.count("dims") == 4 and layers.count("facts") == 3
 
-def test_every_model_file_creates_a_view():
-    for f in create_models.model_files():
-        assert "CREATE OR REPLACE VIEW" in f.read_text(encoding="utf-8")
+
+def test_view_files_create_views_and_mart_files_are_selects():
+    for f, kind in create_models.model_files():
+        sql = f.read_text(encoding="utf-8")
+        if kind == "view":
+            assert "CREATE OR REPLACE VIEW" in sql
+        else:
+            code = [line for line in sql.splitlines() if line.strip() and not line.strip().startswith("--")]
+            assert code[0].split()[0].upper() in ("SELECT", "WITH")   # the script adds CREATE TABLE AS
+
+
+def test_marts_are_built_after_the_marts_they_read():
+    marts = [f.stem for f, kind in create_models.model_files() if kind == "table"]
+    assert marts.index("mart_order_reconciliation") < marts.index("mart_leakage_summary")
+
+
+def test_dependency_order_and_cycle_detection(tmp_path):
+    (tmp_path / "a_summary.sql").write_text("SELECT * FROM db.b_detail")
+    (tmp_path / "b_detail.sql").write_text("SELECT 1")
+    files = sorted(tmp_path.glob("*.sql"))
+    assert [f.stem for f in create_models.dependency_order(files)] == ["b_detail", "a_summary"]
+
+    (tmp_path / "b_detail.sql").write_text("SELECT * FROM db.a_summary")
+    with pytest.raises(ValueError, match="Circular"):
+        create_models.dependency_order(sorted(tmp_path.glob("*.sql")))
 
 
 def test_run_query_returns_id_on_success():
