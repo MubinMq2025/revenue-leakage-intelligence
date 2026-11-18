@@ -39,9 +39,9 @@ SELECT
     reason_code,
     impact,
     COUNT(DISTINCT order_id)                                       AS orders,
-    ROUND(SUM(share * CAST(paid_amount AS double)), 2)             AS paid_rs,
-    ROUND(SUM(share * CAST(expected_amount AS double)), 2)         AS expected_rs,
-    ROUND(SUM(share * CAST(gap_amount AS double)), 2)              AS gap_rs,
-    ROUND(SUM(share * CAST(amount_at_risk AS double)), 2)          AS at_risk_rs
+    CAST(ROUND(SUM(share * CAST(paid_amount AS double)), 2) AS decimal(14, 2))      AS paid_rs,
+    CAST(ROUND(SUM(share * CAST(expected_amount AS double)), 2) AS decimal(14, 2))  AS expected_rs,
+    CAST(ROUND(SUM(share * CAST(gap_amount AS double)), 2) AS decimal(14, 2))       AS gap_rs,
+    CAST(ROUND(SUM(share * CAST(amount_at_risk AS double)), 2) AS decimal(14, 2))   AS at_risk_rs
 FROM allocated
 GROUP BY 1, 2, 3, 4, 5, 6, 7

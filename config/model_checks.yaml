@@ -96,3 +96,53 @@ checks:
     severity: warn
     expect: 1
     sql: SELECT COUNT(*) AS failures FROM fact_orders o WHERE NOT EXISTS (SELECT 1 FROM fact_payments p WHERE p.order_id = o.order_id)
+
+
+  # --- 5. Reconciliation (Phase 3): one code per order, and the money ties out ---
+  - name: recon_mart_rows_match_orders
+    severity: error
+    sql: SELECT abs((SELECT COUNT(*) FROM mart_order_reconciliation) - (SELECT COUNT(*) FROM fact_orders)) AS failures
+
+  - name: recon_mart_one_row_per_order
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM (SELECT order_id FROM mart_order_reconciliation GROUP BY order_id HAVING COUNT(*) > 1) AS dupes
+
+  - name: recon_every_order_has_a_code
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE reason_code IS NULL OR impact IS NULL
+
+  - name: recon_gap_ties_to_source_in_cents
+    severity: error
+    sql: SELECT CAST(round(abs((SELECT SUM(gap_amount) FROM mart_order_reconciliation) - ((SELECT SUM(payment_value) FROM payments) - (SELECT SUM(price + freight_value) FROM order_items))) * 100) AS bigint) AS failures
+
+  - name: recon_amount_at_risk_never_negative
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE amount_at_risk < 0
+
+  - name: recon_no_risk_on_ok_or_explained_orders
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE impact IN ('ok', 'explained', 'unconfirmed') AND amount_at_risk <> 0
+
+  - name: summary_at_risk_ties_to_order_mart_within_1_real
+    severity: error
+    sql: SELECT CASE WHEN abs((SELECT SUM(at_risk_rs) FROM mart_leakage_summary) - (SELECT SUM(amount_at_risk) FROM mart_order_reconciliation)) <= 1 THEN 0 ELSE 1 END AS failures
+
+  - name: summary_paid_ties_to_order_mart_within_1_real
+    severity: error
+    sql: SELECT CASE WHEN abs((SELECT SUM(paid_rs) FROM mart_leakage_summary) - (SELECT SUM(paid_amount) FROM mart_order_reconciliation)) <= 1 THEN 0 ELSE 1 END AS failures
+
+  # Known reconciliation results: a change means the data or the rules changed
+  - name: refund_exposure_orders
+    severity: warn
+    expect: 1096
+    sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE impact = 'refund_exposure'
+
+  - name: revenue_leakage_orders
+    severity: warn
+    expect: 40
+    sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE impact = 'revenue_leakage'
+
+  - name: not_approved_orders
+    severity: warn
+    expect: 143
+    sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE reason_code = 'NOT_APPROVED'
