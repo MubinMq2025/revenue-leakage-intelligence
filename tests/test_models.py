@@ -63,3 +63,35 @@ def test_run_query_raises_with_reason_on_failure():
 def test_fetch_rows_uses_first_row_as_header():
     athena = FakeAthena(rows=[["check_name", "result"], ["orders", "99441"]])
     assert fetch_rows(athena, "q1") == [{"check_name": "orders", "result": "99441"}]
+
+
+# --- check_models.py -----------------------------------------------------------
+
+spec_checks = importlib.util.spec_from_file_location("check_models", REPO_ROOT / "scripts" / "check_models.py")
+check_models = importlib.util.module_from_spec(spec_checks)
+spec_checks.loader.exec_module(check_models)
+
+
+def test_every_check_is_well_formed():
+    for check in check_models.load_checks():
+        assert {"name", "severity", "sql"} <= set(check)
+        assert check["severity"] in ("error", "warn")
+        assert "failures" in check["sql"]
+
+
+def test_error_check_passes_only_at_zero():
+    check = {"severity": "error"}
+    assert check_models.evaluate(check, 0) == "PASS"
+    assert check_models.evaluate(check, 3) == "FAIL"
+
+
+def test_warn_check_compares_with_expected_number():
+    check = {"severity": "warn", "expect": 775}
+    assert check_models.evaluate(check, 775) == "KNOWN"
+    assert check_models.evaluate(check, 780) == "CHANGED"
+
+
+def test_run_check_reads_failures_from_athena():
+    athena = FakeAthena(rows=[["failures"], ["0"]])
+    _, failures, result = check_models.run_check(athena, {"severity": "error", "sql": "SELECT 0 AS failures"})
+    assert (failures, result) == (0, "PASS")
