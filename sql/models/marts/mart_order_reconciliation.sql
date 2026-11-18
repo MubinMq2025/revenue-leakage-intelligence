@@ -1,19 +1,25 @@
 -- mart_order_reconciliation: one row per order with its gap, reason code, impact and amount at risk.
 -- Materialized as a Parquet table by scripts/create_models.py (marts are tables, not views).
 -- Rules are checked IN ORDER; the first match wins. Tolerance: gaps within R$0.01 count as matched.
+-- Thresholds come from the data (see docs/reason_codes.md):
+--   instalment fee cap 20%: normal instalment overpayments peak at 15.5% (95th percentile)
 -- Full definitions: docs/reason_codes.md
 WITH coded AS (
     SELECT
         t.*,
         CASE
-            WHEN t.item_count = 0 AND t.paid_amount > 0.01                         THEN 'PAID_NO_ITEMS'
-            WHEN t.item_count > 0 AND t.payment_count = 0                          THEN 'NO_PAYMENT'
+            -- Would be refund exposure, but the payment was never approved, so it was probably never taken
+            WHEN t.approved_at IS NULL AND t.paid_amount > 0.01
+                 AND (t.item_count = 0 OR t.order_status IN ('canceled', 'unavailable'))  THEN 'NOT_APPROVED'
+            WHEN t.item_count = 0 AND t.paid_amount > 0.01                               THEN 'PAID_NO_ITEMS'
+            WHEN t.item_count > 0 AND t.payment_count = 0                                THEN 'NO_PAYMENT'
             WHEN t.order_status IN ('canceled', 'unavailable')
-                 AND t.item_count > 0 AND t.paid_amount > 0.01                     THEN 'CANCELED_BUT_PAID'
-            WHEN t.item_count > 0 AND abs(t.gap_amount) <= 0.01                    THEN 'MATCHED'
-            WHEN t.gap_amount > 0.01 AND t.max_installments > 1                    THEN 'OVERPAID_INSTALMENT_FEE'
-            WHEN t.gap_amount > 0.01                                               THEN 'OVERPAID_OTHER'
-            WHEN t.gap_amount < -0.01                                              THEN 'UNDERPAID'
+                 AND t.item_count > 0 AND t.paid_amount > 0.01                           THEN 'CANCELED_BUT_PAID'
+            WHEN t.item_count > 0 AND abs(t.gap_amount) <= 0.01                          THEN 'MATCHED'
+            WHEN t.gap_amount > 0.01 AND t.max_installments > 1
+                 AND CAST(t.gap_amount AS double) / CAST(t.expected_amount AS double) <= 0.20  THEN 'OVERPAID_INSTALMENT_FEE'
+            WHEN t.gap_amount > 0.01                                                     THEN 'OVERPAID_OTHER'
+            WHEN t.gap_amount < -0.01                                                    THEN 'UNDERPAID'
             ELSE 'EMPTY_ORDER'
         END AS reason_code
     FROM rli_dev_olist.recon_order_totals t
@@ -27,6 +33,7 @@ SELECT
         WHEN 'UNDERPAID'               THEN 'revenue_leakage'
         WHEN 'OVERPAID_OTHER'          THEN 'customer_overcharged'
         WHEN 'OVERPAID_INSTALMENT_FEE' THEN 'explained'
+        WHEN 'NOT_APPROVED'            THEN 'unconfirmed'
         ELSE 'ok'
     END AS impact,
     -- Money at risk for this order (not always the gap: a cancelled order can match to the cent

@@ -6,6 +6,7 @@ SELECT
     o.customer_key,
     o.purchase_date_key,
     o.order_status,
+    o.approved_at,
     COALESCE(i.item_count, 0)         AS item_count,
     i.seller_count,
     COALESCE(i.items_price, 0)        AS items_price,
