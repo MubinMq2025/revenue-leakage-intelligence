@@ -20,8 +20,7 @@ sys.path.insert(0, str(REPO_ROOT))  # lets this script import from src/
 from src.athena_tools import DATABASE, WORKGROUP, athena_client, run_query  # noqa: E402
 
 MODELS_DIR = REPO_ROOT / "sql" / "models"
-LAYERS = ["dims", "facts"]  # build order
-
+LAYERS = ["dims", "facts", "recon", "marts"]  # build order: each layer reads from the ones before it
 
 def model_files(models_dir: Path = MODELS_DIR) -> list[Path]:
     """All model files in build order: every dimension first, then every fact."""

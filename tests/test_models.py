@@ -40,11 +40,11 @@ class FakeAthena:
         return Paginator()
 
 
-def test_dimensions_are_built_before_facts():
+def test_layers_are_built_in_order():
     layers = [f.parent.name for f in create_models.model_files()]
-    assert layers == sorted(layers)          # "dims" sorts before "facts"
+    positions = [create_models.LAYERS.index(layer) for layer in layers]
+    assert positions == sorted(positions)    # dims, then facts, then recon, then marts
     assert layers.count("dims") == 4 and layers.count("facts") == 3
-
 
 def test_every_model_file_creates_a_view():
     for f in create_models.model_files():
