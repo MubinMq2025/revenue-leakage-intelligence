@@ -160,3 +160,14 @@ checks:
   - name: seller_orders_at_risk_ties_to_order_mart_within_1_real
     severity: error
     sql: SELECT CASE WHEN abs((SELECT SUM(at_risk_rs) FROM mart_seller_orders) - (SELECT SUM(amount_at_risk) FROM mart_order_reconciliation WHERE item_count > 0)) <= 1 THEN 0 ELSE 1 END AS failures
+
+
+  # --- Checkout risk base table (Phase 4.8) -------------------------------------
+  - name: checkout_orders_one_row_per_order
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM (SELECT order_id FROM mart_checkout_orders GROUP BY order_id HAVING COUNT(*) > 1) AS dupes
+
+  - name: checkout_orders_label_matches_reconciliation
+    severity: warn
+    expect: 467
+    sql: SELECT SUM(canceled_after_payment) AS failures FROM mart_checkout_orders
