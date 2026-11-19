@@ -51,3 +51,24 @@ revenue_forecast:
   lightgbm:
     params: {objective: regression_l1, n_estimators: 200, learning_rate: 0.05, num_leaves: 7,
              min_child_samples: 5, verbose: -1}
+
+drift:
+  # 1. Size and price drift (PSI) on the seller report cards: early period vs latest period
+  reference_snapshots: ["2017-04-01", "2017-05-01", "2017-06-01"]
+  current_snapshots: ["2018-04-01", "2018-05-01", "2018-06-01"]
+  features: [orders, revenue_rs, avg_item_price, freight_ratio]
+  psi_bins: 10
+  psi_watch: 0.10      # PSI under 0.10 = stable, 0.10 to 0.25 = watch, over 0.25 = drift
+  psi_alert: 0.25
+  # 2. Behaviour drift: overall rates from the order-level table, same months a year apart.
+  #    (Not PSI on the smoothed seller rates: smoothing makes them depend on order counts,
+  #    so sellers simply growing would look like a change in behaviour.)
+  reference_months: ["2017-04-01", "2017-05-01", "2017-06-01"]
+  current_months: ["2018-04-01", "2018-05-01", "2018-06-01"]
+  rate_watch: 0.25     # a rate moving by more than 25% of itself = watch
+  rate_alert: 0.50     # more than 50% = alert (e.g. cancels going from 1.0% to 1.6%)
+  # 3. Performance decay: has the chosen method got much worse lately?
+  decay_months: 3            # seller queue: last 3 test months vs first 3
+  decay_alert_ratio: 0.5     # alert if recent capture is below half the early capture
+  forecast_recent_weeks: 8   # forecast: WAPE of the last 8 weeks vs the whole backtest
+  forecast_alert_ratio: 1.5  # alert if recent error is 1.5x the usual error
