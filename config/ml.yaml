@@ -81,6 +81,13 @@ order_risk:
   tuning_end: "2018-04-01"      # pick the best method on Jan to Mar 2018 orders
   test_end: "2018-08-01"        # confirm on Apr to Jul 2018 orders (unseen); later orders may not be settled yet
   review_share: 0.01            # finance can review 1% of orders (about 70 a week in 2018)
+
+  # 4.8b+: how sure can we be? Re-score 1,000 reshuffled versions of the unseen orders (bootstrap)
+  bootstrap_samples: 1000
+  interval: 0.90                # report the range that holds 90% of the reshuffled results
+  # Tie on the tuning months: the method listed first wins. Money-focused methods come first,
+  # because the business goal is money at risk. (Written down after a tie in the first run.)
+  tie_break: [expected_loss, biggest_order, lightgbm]
   settle_days: 30               # a seller's past cancellations only count once they are 30 days old
   smoothing_strength: 20
   random_state: 42

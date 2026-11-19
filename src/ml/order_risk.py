@@ -122,3 +122,37 @@ def calibration(df: pd.DataFrame, probability: np.ndarray, bins: int = 5) -> pd.
                         "actual": df["canceled_after_payment"].to_numpy()})
     return out.groupby("group").agg(orders=("actual", "size"), predicted_cancels=("predicted", "sum"),
                                     actual_cancels=("actual", "sum")).reset_index()
+
+
+
+def select_winner(tuning: pd.Series, tie_break: list[str]) -> tuple[str, list[str]]:
+    """Best method on the tuning months. Ties go to the method listed first in tie_break.
+
+    Returns the winner and every method that tied for first place.
+    """
+    best = tuning.max()
+    tied = [m for m in tuning.index if np.isclose(tuning[m], best)]
+    winner = next(m for m in tie_break if m in tied) if len(tied) > 1 else tied[0]
+    return winner, tied
+
+
+def bootstrap_capture(df: pd.DataFrame, scores: dict, share: float, samples: int, seed: int) -> pd.DataFrame:
+    """Money caught by the top `share` of orders, on `samples` reshuffled copies of df.
+
+    Each copy draws len(df) orders at random WITH replacement, so some orders appear twice and
+    some not at all. How much the result moves between copies shows how much of it is luck.
+    """
+    rng = np.random.default_rng(seed)
+    money = df["at_risk_rs"].to_numpy()
+    n = len(df)
+    k = max(1, int(round(n * share)))
+    rows = []
+    for _ in range(samples):
+        idx = rng.integers(0, n, n)
+        total = money[idx].sum()
+        row = {}
+        for method, s in scores.items():
+            top = np.argpartition(-np.asarray(s)[idx], k - 1)[:k]
+            row[method] = money[idx][top].sum() / total if total else np.nan
+        rows.append(row)
+    return pd.DataFrame(rows)
