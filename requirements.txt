@@ -2,5 +2,7 @@ boto3==1.40.*
 pandas==2.3.*
 pyarrow==21.*
 pyyaml==6.*
-faker==37.*
 pytest==8.*
+scikit-learn==1.*
+lightgbm==4.*
+matplotlib==3.*

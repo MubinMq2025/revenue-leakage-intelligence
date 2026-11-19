@@ -9,3 +9,30 @@ seller_features:
   lag_months: 1                  # ...skipping the month just before the snapshot (its outcomes are not settled yet)
   horizon_months: 3              # label: money at risk on the seller's orders over the next 3 months
   smoothing_strength: 20         # how many "average" orders are blended into each seller's rates
+
+
+seller_risk:
+  first_test_snapshot: "2017-10-01"   # earliest month with enough settled history to train the supervised model
+  review_queue_size: 20               # sellers the finance team can review each month
+  random_state: 42
+  log_columns: [orders, revenue_rs, avg_item_price, orders_growth]   # long-tailed numbers, compared on a log scale
+  isolation_forest:
+    n_estimators: 300
+    # behaviour only, not size: otherwise the biggest sellers look "unusual" just for being big
+    features: [at_risk_rate, cancel_rate, late_rate, bad_review_rate, avg_review,
+               freight_ratio, avg_item_price, orders_growth, tenure_months]
+  lightgbm:
+    # tweedie suits money targets that are mostly zero with a few large values
+    params: {objective: tweedie, tweedie_variance_power: 1.5, n_estimators: 300, learning_rate: 0.03,
+             num_leaves: 15, min_child_samples: 20, subsample: 0.8, subsample_freq: 1,
+             colsample_bytree: 0.8, verbose: -1}
+
+  # 4.2b: two size-plus-risk ideas, fixed BEFORE looking at the results
+  lightgbm_regularized:
+    params: {objective: tweedie, tweedie_variance_power: 1.5, n_estimators: 150, learning_rate: 0.05,
+             num_leaves: 7, min_child_samples: 50, reg_lambda: 5.0, subsample: 0.8, subsample_freq: 1,
+             colsample_bytree: 0.8, verbose: -1}
+  selection:
+    tuning_end: "2018-03-01"   # pick the winner on Oct 2017 to Feb 2018, then confirm on Mar to Jun 2018 (unseen)
+
+
