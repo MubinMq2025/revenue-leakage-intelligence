@@ -36,3 +36,18 @@ seller_risk:
     tuning_end: "2018-03-01"   # pick the winner on Oct 2017 to Feb 2018, then confirm on Mar to Jun 2018 (unseen)
 
 
+
+revenue_forecast:
+  source_table: mart_order_reconciliation   # paid_amount by purchase date = what customers paid each week
+  first_week: "2017-01-02"     # Mondays. 2016 is nearly empty, so it is left out
+  last_week: "2018-08-20"      # last complete week (the data stops at the end of August 2018)
+  horizons: [1, 2, 3, 4]       # forecast 1 to 4 weeks ahead
+  first_origin: "2017-10-02"   # first week we "stand at" and forecast from
+  tuning_end: "2018-03-05"     # pick the winner on origins before this, confirm on origins after it (unseen)
+  interval_coverage: 0.80      # the low-high range should contain the actual value 80% of the time
+  min_past_errors: 8           # past forecast errors needed before we trust an interval
+  black_friday_weeks: ["2016-11-21", "2017-11-20"]   # Monday of each Black Friday week
+  random_state: 42
+  lightgbm:
+    params: {objective: regression_l1, n_estimators: 200, learning_rate: 0.05, num_leaves: 7,
+             min_child_samples: 5, verbose: -1}
