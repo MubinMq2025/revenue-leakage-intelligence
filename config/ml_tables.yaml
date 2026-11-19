@@ -1,0 +1,69 @@
+# Output tables of the Phase 4 models.
+# terraform/ml_tables.tf registers each one in the Glue catalog at s3://<bucket>/ml/<table>/,
+# and scripts/publish_ml_outputs.py writes the Parquet files with exactly these columns and types.
+# One file, both sides read it, so the table and the data can never disagree.
+# Types: string, int, double, date, timestamp.
+
+tables:
+  ml_seller_queue:
+    description: Every active seller at the latest snapshot, ranked by the method chosen in the 4.2b backtest
+    columns:
+      snapshot: date
+      seller_id: string
+      method: string
+      queue_rank: int
+      in_queue: int
+      orders: double
+      revenue_rs: double
+      at_risk_rate: double
+      cancel_rate: double
+      late_rate: double
+      avg_review: double
+
+  ml_seller_risk_backtest:
+    description: Seller queue backtest, share of next-3-month seller risk caught by the top k sellers
+    columns:
+      snapshot: date
+      method: string
+      k: int
+      capture: double
+
+  ml_revenue_forecast:
+    description: Weekly revenue forecast, backtest rows (with actuals) and the next 4 weeks (future)
+    columns:
+      kind: string
+      origin: date
+      horizon: int
+      target_week: date
+      method: string
+      is_chosen: int
+      forecast: double
+      low: double
+      high: double
+      actual: double
+
+  ml_order_risk:
+    description: Checkout risk scores for the unseen months (Apr to Jul 2018), with the review queue and reasons
+    columns:
+      order_id: string
+      purchased_at: timestamp
+      main_seller_id: string
+      paid_rs: double
+      chance: double
+      expected_loss_rs: double
+      queue_rank: int
+      in_queue: int
+      reasons: string
+      canceled_after_payment: int
+      at_risk_rs: double
+
+  ml_drift_checks:
+    description: Latest drift check, one row per check, with the overall OK / WATCH / ALERT status
+    columns:
+      checked_at: timestamp
+      overall_status: string
+      check_group: string
+      name: string
+      value: double
+      status: string
+      detail: string

@@ -171,3 +171,32 @@ checks:
     severity: warn
     expect: 467
     sql: SELECT SUM(canceled_after_payment) AS failures FROM mart_checkout_orders
+
+
+  # --- Published ML outputs (Phase 4.6) -------------------------------------------
+  - name: ml_order_risk_one_row_per_order
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM (SELECT order_id FROM ml_order_risk GROUP BY order_id HAVING COUNT(*) > 1) AS dupes
+
+  - name: ml_order_risk_every_queued_order_has_reasons
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM ml_order_risk WHERE in_queue = 1 AND (reasons IS NULL OR reasons = '')
+
+  - name: ml_order_risk_queue_size
+    severity: warn
+    expect: 262
+    sql: SELECT SUM(in_queue) AS failures FROM ml_order_risk
+
+  - name: ml_seller_queue_size
+    severity: warn
+    expect: 20
+    sql: SELECT SUM(in_queue) AS failures FROM ml_seller_queue
+
+  - name: ml_forecast_has_4_future_weeks
+    severity: warn
+    expect: 4
+    sql: SELECT COUNT(*) AS failures FROM ml_revenue_forecast WHERE kind = 'future' AND is_chosen = 1
+
+  - name: ml_drift_has_one_overall_status
+    severity: error
+    sql: SELECT COUNT(DISTINCT overall_status) - 1 AS failures FROM ml_drift_checks
