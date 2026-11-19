@@ -146,3 +146,17 @@ checks:
     severity: warn
     expect: 143
     sql: SELECT COUNT(*) AS failures FROM mart_order_reconciliation WHERE reason_code = 'NOT_APPROVED'
+
+
+  # --- ML base table (Phase 4) --------------------------------------------------
+  - name: seller_orders_one_row_per_order_seller
+    severity: error
+    sql: SELECT COUNT(*) AS failures FROM (SELECT order_id, seller_id FROM mart_seller_orders GROUP BY order_id, seller_id HAVING COUNT(*) > 1) AS dupes
+
+  - name: seller_orders_cover_every_order_with_items
+    severity: error
+    sql: SELECT abs((SELECT COUNT(DISTINCT order_id) FROM mart_seller_orders) - (SELECT COUNT(*) FROM mart_order_reconciliation WHERE item_count > 0)) AS failures
+
+  - name: seller_orders_at_risk_ties_to_order_mart_within_1_real
+    severity: error
+    sql: SELECT CASE WHEN abs((SELECT SUM(at_risk_rs) FROM mart_seller_orders) - (SELECT SUM(amount_at_risk) FROM mart_order_reconciliation WHERE item_count > 0)) <= 1 THEN 0 ELSE 1 END AS failures

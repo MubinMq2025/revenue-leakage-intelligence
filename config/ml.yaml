@@ -1,0 +1,11 @@
+# Settings for the Phase 4 machine learning models.
+# Change a number here to change the model; the code reads everything from this file.
+
+seller_features:
+  source_table: mart_seller_orders
+  first_snapshot: "2017-04-01"   # first month-start we "stand at" and look back from
+  last_snapshot: "2018-06-01"    # last one whose 3-month future still fits inside the data (ends Aug 2018)
+  window_months: 6               # features look back over 6 months of orders...
+  lag_months: 1                  # ...skipping the month just before the snapshot (its outcomes are not settled yet)
+  horizon_months: 3              # label: money at risk on the seller's orders over the next 3 months
+  smoothing_strength: 20         # how many "average" orders are blended into each seller's rates

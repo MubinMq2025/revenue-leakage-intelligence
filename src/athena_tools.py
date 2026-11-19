@@ -53,3 +53,33 @@ def fetch_rows(athena, execution_id: str) -> list[dict]:
                 continue
             rows.append(dict(zip(header, values)))
     return rows
+
+
+
+def read_table(name: str, database: str = DATABASE):
+    """Read a materialized (Parquet) table straight from S3 into a pandas DataFrame.
+
+    Much faster than paging query results through the Athena API. Works for marts (tables), not views.
+    """
+    import io
+
+    import pandas as pd
+    import pyarrow.parquet as pq
+
+    session = boto3.Session(region_name=REGION)
+    table = session.client("glue").get_table(DatabaseName=database, Name=name)["Table"]
+    if table.get("TableType") == "VIRTUAL_VIEW":
+        raise ValueError(f"{name} is a view; read_table only reads materialized tables")
+
+    bucket, _, prefix = table["StorageDescriptor"]["Location"].removeprefix("s3://").partition("/")
+    s3 = session.client("s3")
+    frames = []
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix.rstrip("/") + "/"):
+        for obj in page.get("Contents", []):
+            if obj["Size"] == 0:
+                continue
+            body = s3.get_object(Bucket=bucket, Key=obj["Key"])["Body"].read()
+            frames.append(pq.read_table(io.BytesIO(body)).to_pandas(date_as_object=False))
+    if not frames:
+        raise ValueError(f"{name} has no data files at s3://{bucket}/{prefix}")
+    return pd.concat(frames, ignore_index=True)
