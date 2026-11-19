@@ -29,6 +29,7 @@ sys.path.insert(0, str(REPO_ROOT))  # lets this script import from src/
 from src.athena_tools import read_table  # noqa: E402
 from src.ml.features import hidden_delivery_share, windows  # noqa: E402
 from src.ml.seller_risk import METHODS, backtest, method_scores, select_method, training_snapshots  # noqa: E402
+from src.ml.tracking import log_run  # noqa: E402
 
 CONFIG_FILE = REPO_ROOT / "config" / "ml.yaml"
 FEATURES_FILE = REPO_ROOT / "data" / "output" / "seller_features.parquet"
@@ -58,8 +59,8 @@ def main() -> None:
     orders = read_table(fcfg["source_table"])
     for col in ("purchase_month", "delivered_date"):
         orders[col] = pd.to_datetime(orders[col])
-    context = [f"Features: {len(features):,} seller-months. Deliveries hidden as not yet known: "
-               f"{hidden_delivery_share(orders, fcfg):.1%}"]
+    hidden_share = hidden_delivery_share(orders, fcfg)
+    context = [f"Features: {len(features):,} seller-months. Deliveries hidden as not yet known: {hidden_share:.1%}"]
 
     # All seller-attributable money at risk in each label window, including sellers with no history yet
     totals, new_share = {}, {}
@@ -76,8 +77,8 @@ def main() -> None:
 
     tests = sorted(results["snapshot"].unique())
     context.append(f"Test months: {pd.Timestamp(tests[0]):%Y-%m} to {pd.Timestamp(tests[-1]):%Y-%m} ({len(tests)} months)")
-    context.append(f"Future risk from sellers with no history yet (no model can rank them): "
-                   f"{sum(new_share[pd.Timestamp(t)] for t in tests) / len(tests):.1%} on average")
+    new_seller_share = sum(new_share[pd.Timestamp(t)] for t in tests) / len(tests)
+    context.append(f"Future risk from sellers with no history yet (no model can rank them): {new_seller_share:.1%} on average")
 
     gains = results.pivot_table(index="k", columns="method", values="capture", aggfunc="mean")[METHODS]
     print("\nAverage share of next-3-month seller risk caught by the top k sellers:")
@@ -115,6 +116,14 @@ def main() -> None:
     print("\nContext:")
     for line in context:
         print(f"  {line}")
+
+    metrics = {"hidden_delivery_share": hidden_share, "new_seller_risk_share": new_seller_share,
+               **{f"tuning_capture_top{k}.{m}": v for m, v in table["tuning"].items()},
+               **{f"holdout_capture_top{k}.{m}": v for m, v in table["holdout"].items()}}
+    run_id = log_run("seller_risk_queue", f"backtest {pd.Timestamp.now():%Y-%m-%d %H:%M}",
+                     params={"seller_features": fcfg, "seller_risk": cfg}, metrics=metrics,
+                     artifacts=[CHART_FILE, RESULTS_FILE], tags={"winner": winner})
+    print(f"\nLogged to MLflow (experiment seller_risk_queue, run {run_id[:8]})")
 
 
 if __name__ == "__main__":

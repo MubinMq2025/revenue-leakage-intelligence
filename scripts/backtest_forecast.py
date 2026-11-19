@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))  # lets this script import from src/
 from src.athena_tools import read_table  # noqa: E402
 from src.ml.forecast import (METHODS, add_intervals, backtest, future_forecast, select_method,  # noqa: E402
                              summarize, wape, weekly_revenue)
+from src.ml.tracking import log_run  # noqa: E402
 
 CONFIG_FILE = REPO_ROOT / "config" / "ml.yaml"
 RESULTS_FILE = REPO_ROOT / "data" / "output" / "revenue_forecast_backtest.csv"
@@ -93,6 +94,13 @@ def main() -> None:
     fig.savefig(CHART_FILE, dpi=150)
     print(f"\nSaved {RESULTS_FILE.relative_to(REPO_ROOT)}, {FUTURE_FILE.relative_to(REPO_ROOT)} "
           f"and {CHART_FILE.relative_to(REPO_ROOT)}")
+
+    metrics = {f"{col}.{m}": summary.loc[m, col] for m in summary.index for col in summary.columns}
+    metrics["weeks"] = len(series)
+    run_id = log_run("revenue_forecast", f"backtest {pd.Timestamp.now():%Y-%m-%d %H:%M}",
+                     params=cfg, metrics=metrics, artifacts=[CHART_FILE, RESULTS_FILE, FUTURE_FILE],
+                     tags={"winner": winner})
+    print(f"\nLogged to MLflow (experiment revenue_forecast, run {run_id[:8]})")
 
 
 if __name__ == "__main__":
