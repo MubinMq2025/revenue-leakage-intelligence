@@ -156,3 +156,13 @@ def bootstrap_capture(df: pd.DataFrame, scores: dict, share: float, samples: int
             row[method] = money[idx][top].sum() / total if total else np.nan
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+
+def prepare(orders: pd.DataFrame, cfg: dict) -> dict:
+    """Parse dates, add point-in-time seller history and split into train / tuning / holdout."""
+    orders = orders.copy()
+    orders["purchased_at"] = pd.to_datetime(orders["purchased_at"])
+    train_mask = (orders["purchased_at"] >= cfg["train_start"]) & (orders["purchased_at"] < cfg["train_end"])
+    prior = orders.loc[train_mask, "canceled_after_payment"].mean()
+    return split(add_seller_history(orders, cfg["settle_days"], cfg["smoothing_strength"], prior), cfg)

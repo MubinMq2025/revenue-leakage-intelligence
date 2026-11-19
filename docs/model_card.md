@@ -156,3 +156,30 @@ The figures are the share of the next 3 months' seller-attributable money at ris
 
 \*\*Lesson recorded:\*\* the first drift version applied PSI to smoothed seller rates and raised false alarms. Smoothed rates fall as sellers get bigger, even when their behaviour is unchanged. Behaviour is now measured with plain overall rates, and PSI is kept for size and price only.
 
+## 4. Checkout risk model (order level)
+
+**Purpose:** score every paid order at checkout for the chance it is cancelled after payment, then rank by **expected loss = chance × amount paid**, so finance checks the orders with the most money at risk. Finance capacity is 1% of orders (262 orders in Apr to Jul 2018).
+
+**Data:** `mart_checkout_orders`, one row per paid order with items. The label is the reconciliation's CANCELED_BUT_PAID code (467 orders). Inputs are only facts known at checkout, plus the main seller's history up to that moment. Past cancellations only count once they are 30 days old, and smoothing uses the 2017 average only.
+
+**How it was tested:** trained on 2017 (44,579 orders, 204 cancellations), the method picked on Jan to Mar 2018, and confirmed on Apr to Jul 2018 (26,220 orders, 90 cancellations) with 1,000 bootstrap reshuffles.
+
+| Method (top 1% of orders) | Picking months | Unseen months | Likely range (90%) |
+|---|---|---|---|
+| **Expected loss (chosen)** | 13.2% | **35.6%** | 9.0% to 54.7% |
+| Biggest orders | 9.3% | 50.6% | 23.5% to 64.6% |
+| LightGBM chance only | 13.2% | 2.2% | 0.6% to 4.9% |
+| Random | 1.0% | 1.0% | |
+
+The figures are the share of money at risk caught.
+
+**In plain words:** of every R$10,000 that ends up stuck in cancelled orders, checking 1% of orders catches about R$3,560 with expected loss (likely R$900 to R$5,470), against R$100 at random.
+
+**What drives risk (SHAP):** the main seller's number of earlier orders (31%), category (17%), the seller's past cancel rate (7%) and promised delivery days (7%). Holding everything else equal, orders over R$179 are 1.25x as likely to cancel, and orders whose delivery is under 11% of the price are 1.31x as likely. Each queued order comes with its top 3 reasons in words.
+
+**Limitations: when not to trust it**
+- **Rare events:** only about 100 cancellations per period, so the ranges are wide and the best method changes between periods. Biggest orders won on the unseen months (in 92% of reshuffles), expected loss won on the picking months.
+- **Tie:** LightGBM and expected loss tied on the picking months. The first run broke the tie by list order. A written tie-break rule (money-focused methods first) was added after that run and picks expected loss.
+- **Over-confident at the top:** the riskiest fifth of orders was predicted to have 73 cancellations and had 42. Re-calibrate before using the chances for budgeting.
+- **Correlated inputs:** order size and delivery share move together, so SHAP's split of credit between them is approximate.
+- **No refunds table:** "at risk" means money held for orders that were cancelled after payment, not confirmed losses.
