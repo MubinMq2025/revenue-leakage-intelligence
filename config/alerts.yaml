@@ -1,0 +1,20 @@
+# Phase 5: when the daily pipeline should email the finance team.
+# Change a number here to change the alert; the Lambda reads this file (no code change).
+
+leakage:
+  source_table: mart_order_reconciliation
+  # Judge the latest month that has enough orders to be meaningful.
+  # The last weeks of the Olist data hold only a handful of orders, and 1 cancelled order
+  # out of 16 would look like a 6% leakage rate.
+  min_orders: 1000
+  # Alert when the money at risk is above this share of what customers paid that month.
+  # 2017 averaged 2.03% and Jan to Aug 2018 0.94% (Phase 3), so 2% means "back to the bad old days".
+  max_at_risk_rate: 0.02
+
+drift:
+  table: ml_drift_checks
+  # The drift check already says ALERT on the historical data (the at-risk rate fell from 0.89% to 0.30%,
+  # an improvement, but a reason to retrain). Emailing on it would send the same email every day,
+  # and people learn to ignore alerts that never change. So drift is REPORTED in every result and email,
+  # but only triggers an email on its own when this is true.
+  alert_on_drift: false
