@@ -7,6 +7,9 @@ can be traced back to the exact run, code and settings that produced it.
 
 Runs are stored locally in data/mlflow/ (not in Git). To browse them:
     mlflow ui --backend-store-uri sqlite:///data/mlflow/mlflow.db
+
+Set the environment variable RLI_TRACKING=off to skip tracking (the scheduled AWS Glue run does
+this: its disk is thrown away after each run, and the results are published to Athena instead).
 """
 
 from __future__ import annotations
@@ -41,7 +44,9 @@ def git_commit() -> str:
 
 def log_run(experiment: str, run_name: str, params: dict, metrics: dict,
             artifacts=(), tags: dict | None = None, mlflow_dir: Path = MLFLOW_DIR) -> str:
-    """Record one run and return its MLflow run ID."""
+    """Record one run and return its MLflow run ID ("off" when tracking is switched off)."""
+    if os.environ.get("RLI_TRACKING", "on").lower() == "off":
+        return "off"
     os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")   # keep MLflow's start-up tips out of our output
     import mlflow
 
