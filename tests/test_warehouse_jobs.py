@@ -139,3 +139,11 @@ def test_leakage_passes_the_test_line_through(no_aws, monkeypatch):
     monkeypatch.setattr(handler, "check_leakage", lambda athena, max_rate: seen.setdefault("rate", max_rate) and {})
     handler.lambda_handler({"action": "leakage", "max_at_risk_rate": 0.001}, None)
     assert seen["rate"] == 0.001
+
+
+def test_leakage_reads_the_test_line_from_the_step_functions_input(no_aws, monkeypatch):
+    seen = []
+    monkeypatch.setattr(handler, "check_leakage", lambda athena, max_rate: seen.append(max_rate) or {})
+    handler.lambda_handler({"action": "leakage", "input": {"max_at_risk_rate": 0.001}}, None)
+    handler.lambda_handler({"action": "leakage", "input": {}}, None)   # a normal daily run
+    assert seen == [0.001, None]

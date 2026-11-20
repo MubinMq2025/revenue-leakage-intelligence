@@ -6,6 +6,7 @@ One function, three actions, chosen by the event Step Functions sends:
     {"action": "check"}                       run the checks in config/model_checks.yaml
     {"action": "leakage"}                     latest month's money at risk vs config/alerts.yaml, plus drift
     {"action": "leakage", "max_at_risk_rate": 0.001}   same, with a test line (forces an alert)
+    {"action": "leakage", "input": {...}}      Step Functions passes its start input; a test line inside it is used
 
 A failed build or check RAISES, so Step Functions sees the step as failed, stops the chain and
 sends the failure email. The leakage action never fails on a high number: it returns "alert": true
@@ -55,7 +56,9 @@ def do_check(event: dict) -> dict:
 
 
 def do_leakage(event: dict) -> dict:
-    return check_leakage(athena_client(), max_rate=event.get("max_at_risk_rate"))
+    # A test line can come directly (manual invoke) or inside the Step Functions start input
+    max_rate = event.get("max_at_risk_rate", (event.get("input") or {}).get("max_at_risk_rate"))
+    return check_leakage(athena_client(), max_rate=max_rate)
 
 
 ACTIONS = {"build": do_build, "check": do_check, "leakage": do_leakage}
