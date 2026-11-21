@@ -39,7 +39,7 @@ flowchart TD
 
 The rest of this page walks through that picture one stop at a time.
 
-## Chapter 1: A file arrives
+## Chapter 1: a file arrives
 
 Olist ships 9 tables (orders, items, payments, products, sellers, customers, reviews, geolocation, category names). Each one has a YAML data contract that says which columns must exist, which keys must be unique, which dates are allowed and which values are legal.
 
@@ -49,7 +49,7 @@ Result: 1,550,922 rows checked, 0 rejected, 668 flagged. The Lambda checked the 
 
 A Glue PySpark job then reads only the latest load of each table (every load is a full snapshot, so reading all of them would double count), casts the types from the same contracts, and removes 261,831 exact duplicate geolocation rows. The same YAML files drive the Lambda checks, the Glue types and the Athena table definitions, so a schema change is one edit.
 
-## Chapter 2: The data gets a shape
+## Chapter 2: the data gets a shape
 
 The curated tables become a star schema in Athena: `dim_date`, `dim_customer`, `dim_seller`, `dim_product`, plus `fact_orders`, `fact_order_items` and `fact_payments`. The SQL lives in Git and one command rebuilds everything.
 
@@ -57,7 +57,7 @@ Olist gives a new `customer_id` to every order, so the facts use `customer_uniqu
 
 43 checks run after every build. Structural checks (duplicates, orphans, join fan-out) must be zero. Known business gaps, such as 775 orders with no items, are recorded with their expected count, so the run fails if the count changes.
 
-## Chapter 3: Following the money
+## Chapter 3: following the money
 
 For every order the pipeline compares what the customer paid with what the items and delivery were worth, then gives the order exactly one reason code. The first rule that matches wins.
 
