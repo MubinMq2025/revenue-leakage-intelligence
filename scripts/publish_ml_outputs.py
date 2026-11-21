@@ -33,7 +33,7 @@ sys.path.insert(0, str(REPO_ROOT))  # lets this script import from src/
 from src.athena_tools import DATABASE, REGION  # noqa: E402
 from src.ml.forecast import select_method as select_forecast  # noqa: E402
 from src.ml.forecast import summarize  # noqa: E402
-from src.ml.order_risk import select_winner  # noqa: E402
+from src.ml.order_risk import score_column  # noqa: E402
 from src.ml.publish import publish  # noqa: E402
 from src.ml.seller_risk import method_scores, select_method, training_snapshots  # noqa: E402
 
@@ -71,14 +71,13 @@ def order_risk(cfg: dict) -> pd.DataFrame:
     orc = cfg["order_risk"]
     scores = pd.read_parquet(OUTPUT / "order_risk_scores.parquet")
     reasons = pd.read_csv(OUTPUT / "order_risk_queue_reasons.csv", dtype={"order_id": str})[["order_id", "reasons"]]
-    results = pd.read_csv(OUTPUT / "order_risk_backtest.csv")
-    tuning = results[(results["period"] == "tuning") & (results["method"] != "random")].set_index("method")["money_caught"]
-    method, _ = select_winner(tuning, orc["tie_break"])
-    score_column = {"expected_loss": "expected_loss_rs", "lightgbm": "chance", "biggest_order": "paid_rs"}[method]
+    # The method chosen by the backtest on the median over seeds (not re-decided here from one run)
+    method = json.loads((OUTPUT / "order_risk_winner.json").read_text(encoding="utf-8"))["winner"]
+    score_col = score_column(method)
 
     out = scores.rename(columns={"probability": "chance"}).astype({"order_id": str})
     out = out.merge(reasons, on="order_id", how="left")
-    out["queue_rank"] = out[score_column].rank(ascending=False, method="first").astype(int)
+    out["queue_rank"] = out[score_col].rank(ascending=False, method="first").astype(int)
     out["in_queue"] = (out["queue_rank"] <= max(1, round(len(out) * orc["review_share"]))).astype(int)
     out.loc[out["in_queue"] == 0, "queue_rank"] = None
     return out.sort_values("queue_rank")

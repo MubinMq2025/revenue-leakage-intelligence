@@ -14,6 +14,7 @@ Usage (from the repo root, with .venv active and logged in to AWS):
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))  # lets this script import from src/
 
 from src.athena_tools import read_table  # noqa: E402
 from src.ml.explain import contributions, importance, top_reasons  # noqa: E402
-from src.ml.order_risk import model_inputs, prepare  # noqa: E402
+from src.ml.order_risk import model_inputs, prepare, score_column  # noqa: E402
 from src.ml.tracking import log_run  # noqa: E402
 
 CONFIG_FILE = REPO_ROOT / "config" / "ml.yaml"
@@ -34,6 +35,7 @@ OUTPUT = REPO_ROOT / "data" / "output"
 MODEL_FILE = OUTPUT / "order_risk_model.txt"
 SCORES_FILE = OUTPUT / "order_risk_scores.parquet"
 REASONS_FILE = OUTPUT / "order_risk_queue_reasons.csv"
+WINNER_FILE = OUTPUT / "order_risk_winner.json"
 
 
 def effect_by_band(values: pd.Series, contrib: pd.Series, bands: int = 5) -> pd.DataFrame:
@@ -75,7 +77,8 @@ def main() -> None:
     # The review queue: top 1% by expected loss (chance x amount paid), with reasons
     queue = holdout.assign(chance=chance, expected_loss_rs=chance * holdout["paid_rs"])
     n = max(1, int(round(len(queue) * cfg["review_share"])))
-    queue = queue.nlargest(n, "expected_loss_rs")
+    method = json.loads(WINNER_FILE.read_text(encoding="utf-8"))["winner"]   # same method as the published queue
+    queue = queue.nlargest(n, score_column(method))
     reasons = {i: top_reasons(contrib.loc[i], holdout.loc[i, cfg["numeric_features"] + cfg["categorical_features"]])
                for i in queue.index}
     queue["reasons"] = [" | ".join(reasons[i]) for i in queue.index]

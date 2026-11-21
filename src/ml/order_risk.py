@@ -76,11 +76,17 @@ def split(orders: pd.DataFrame, cfg: dict) -> dict:
     }
 
 
-def train_model(train: pd.DataFrame, cfg: dict):
+def train_model(train: pd.DataFrame, cfg: dict, seed: int | None = None):
     import lightgbm as lgb
 
+    # Fix the row order first. LightGBM's bagging (subsample) picks rows by position, so the same
+    # orders in a different order give a different model. Athena rewrites the mart files on every
+    # rebuild, in no fixed order, so without this the daily pipeline trained a new model each day.
+    train = train.sort_values(["purchased_at", "order_id"], kind="mergesort").reset_index(drop=True)
     categories = {c: sorted(train[c].dropna().unique()) for c in cfg["categorical_features"]}
-    model = lgb.LGBMClassifier(**cfg["lightgbm"]["params"], random_state=cfg["random_state"])
+    seed = cfg["random_state"] if seed is None else seed
+    model = lgb.LGBMClassifier(**cfg["lightgbm"]["params"], random_state=seed, deterministic=True,
+                               force_row_wise=True, n_jobs=1)
     model.fit(model_inputs(train, cfg, categories), train["canceled_after_payment"])
     return model, categories
 
@@ -134,6 +140,56 @@ def select_winner(tuning: pd.Series, tie_break: list[str]) -> tuple[str, list[st
     tied = [m for m in tuning.index if np.isclose(tuning[m], best)]
     winner = next(m for m in tie_break if m in tied) if len(tied) > 1 else tied[0]
     return winner, tied
+
+
+def walk_forward_capture(orders: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Money caught by each method in every month before the holdout, as if run live that month.
+
+    For each month M the model is trained only on orders bought before M minus settle_days (their
+    outcome would be known by then), then ranks the orders of month M. One 3-month tuning block held
+    too few cancellations: the vote was decided by one or two orders and flipped on the holdout.
+    Nine monthly windows count far more cancellations before anything is chosen.
+    """
+    when = orders["purchased_at"]
+    share = cfg["review_share"]
+    gap = pd.Timedelta(days=cfg["settle_days"])
+    rows = []
+    for month in pd.date_range(cfg["selection_start"], cfg["tuning_end"], freq="MS", inclusive="left"):
+        train = orders[(when >= cfg["train_start"]) & (when < month - gap)]
+        test = orders[(when >= month) & (when < month + pd.offsets.MonthBegin(1))]
+        if test["at_risk_rs"].sum() == 0:
+            continue                                   # nothing at risk that month: nothing to compare
+        model, categories = train_model(train, cfg)
+        prob = model.predict_proba(model_inputs(test, cfg, categories))[:, 1]
+        for method, scores in method_scores(test, prob).items():
+            rows.append({"window": month.strftime("%Y-%m"), "method": method,
+                         "cancels_in_window": int(test["canceled_after_payment"].sum()),
+                         **capture(test, scores, share)})
+    return pd.DataFrame(rows)
+
+
+def choose_method(windows: pd.DataFrame, baseline: str, min_win_share: float, min_margin: float) -> dict:
+    """Keep the simple baseline unless a model method clearly beats it, window after window.
+
+    A model method replaces the baseline only if it beats it in at least `min_win_share` of the
+    windows AND its median lead is at least `min_margin` (share of money at risk). Written down
+    before rerunning, so the holdout result cannot change the rule.
+    """
+    table = windows.pivot(index="window", columns="method", values="money_caught")
+    report = {}
+    for method in [m for m in table.columns if m != baseline]:
+        lead = table[method] - table[baseline]
+        report[method] = {"win_share": float((lead > 0).mean()), "median_lead": float(lead.median()),
+                          "passes": bool((lead > 0).mean() >= min_win_share and lead.median() >= min_margin)}
+    passing = [m for m, r in report.items() if r["passes"]]
+    winner = max(passing, key=lambda m: report[m]["median_lead"]) if passing else baseline
+    return {"winner": winner, "baseline": baseline, "windows": int(len(table)),
+            "median_money_caught": {m: float(v) for m, v in table.median().items()}, "challengers": report}
+
+
+def score_column(method: str) -> str:
+    """Which column of the scored orders ranks the queue for each method."""
+    return {"expected_loss": "expected_loss_rs", "lightgbm": "chance", "biggest_order": "paid_rs"}[method]
 
 
 def bootstrap_capture(df: pd.DataFrame, scores: dict, share: float, samples: int, seed: int) -> pd.DataFrame:

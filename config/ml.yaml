@@ -88,6 +88,14 @@ order_risk:
   # Tie on the tuning months: the method listed first wins. Money-focused methods come first,
   # because the business goal is money at risk. (Written down after a tie in the first run.)
   tie_break: [expected_loss, biggest_order, lightgbm]
+  # Phase 6 audit: on one 3-month tuning block the vote was decided by one or two orders and the
+  # ranking flipped on the holdout. The method is now chosen on monthly walk-forward windows
+  # (Jul 2017 to Mar 2018, all before the holdout), and the simple rule stays unless a model clearly wins.
+  # This rule was set AFTER the first holdout result was seen; the README says so.
+  selection_start: "2017-07-01"
+  selection_baseline: biggest_order
+  min_win_share: 0.67           # the model must win at least 2 windows in 3
+  min_margin: 0.02              # and lead by at least 2 points of money at risk (median)
   settle_days: 30               # a seller's past cancellations only count once they are 30 days old
   smoothing_strength: 20
   random_state: 42

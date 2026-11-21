@@ -5,8 +5,9 @@ Trains LightGBM on 2017 orders, scores Jan to Mar 2018 (to pick the best ranking
 Apr to Jul 2018 (unseen, the honest test), and compares with simple rules. Finance reviews the
 top 1% of orders; the score is the share of money at risk those orders contain.
 
-4.8b+: every holdout number also gets a likely range (bootstrap), and ties on the tuning months
-are broken by a written rule (tie_break in config/ml.yaml).
+4.8b+: every holdout number also gets a likely range (bootstrap).
+Phase 6: the method is chosen on monthly walk-forward windows before the holdout, and the simple
+"biggest order first" rule stays unless a model clearly beats it (choose_method in src/ml/order_risk.py).
 
 Usage (from the repo root, with .venv active and logged in to AWS):
     python scripts/backtest_order_risk.py
@@ -14,6 +15,7 @@ Usage (from the repo root, with .venv active and logged in to AWS):
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -30,13 +32,14 @@ sys.path.insert(0, str(REPO_ROOT))  # lets this script import from src/
 
 from src.athena_tools import read_table  # noqa: E402
 from src.ml.order_risk import (METHODS, add_seller_history, bootstrap_capture, calibration, capture,  # noqa: E402
-                               evaluate, method_scores, model_inputs, select_winner, split, train_model)
+                               choose_method, evaluate, method_scores, model_inputs, split, train_model, walk_forward_capture)
 from src.ml.tracking import log_run  # noqa: E402
 
 CONFIG_FILE = REPO_ROOT / "config" / "ml.yaml"
 OUTPUT = REPO_ROOT / "data" / "output"
 RESULTS_FILE = OUTPUT / "order_risk_backtest.csv"
 SCORES_FILE = OUTPUT / "order_risk_scores.parquet"
+WINNER_FILE = OUTPUT / "order_risk_winner.json"   # read by explain_order_risk.py and publish_ml_outputs.py
 MODEL_FILE = OUTPUT / "order_risk_model.txt"
 CHART_FILE = REPO_ROOT / "docs" / "images" / "order_risk_gains.png"
 
@@ -72,13 +75,21 @@ def main() -> None:
                           "holdout cancels caught": cancels})
     print((shown * 100).round(1).astype(str).add("%").to_string())
 
-    winner, tied = select_winner(table.drop(index="random")["tuning"], cfg["tie_break"])
-    if len(tied) > 1:
-        print(f"\nTie on the tuning months between {', '.join(tied)}: broken by the written rule "
-              f"(tie_break in config/ml.yaml, money-focused methods first)")
+    # Choose on monthly walk-forward windows, simple rule unless a model clearly wins (see choose_method)
+    windows = walk_forward_capture(orders, cfg)
+    choice = choose_method(windows, cfg["selection_baseline"], cfg["min_win_share"], cfg["min_margin"])
+    print(f"\nWalk-forward windows ({choice['windows']} months before the holdout, "
+          f"{windows.drop_duplicates('window')['cancels_in_window'].sum()} cancellations), money caught per month:")
+    print((windows.pivot(index="window", columns="method", values="money_caught") * 100).round(1).to_string())
+    for method, r in choice["challengers"].items():
+        print(f"  {method:<14} beats {choice['baseline']} in {r['win_share']:.0%} of months, "
+              f"median lead {r['median_lead'] * 100:+.1f} pts -> {'PASSES' if r['passes'] else 'does not pass'}")
+    winner = choice["winner"]
+    WINNER_FILE.write_text(json.dumps(choice, indent=2))
+    windows.to_csv(OUTPUT / "order_risk_walk_forward.csv", index=False)
     pr_auc = results.loc[(results["method"] == "lightgbm") & (results["period"] == "holdout"), "pr_auc"].item()
     base = parts["holdout"]["canceled_after_payment"].mean()
-    print(f"\nWinner (picked on tuning months only): {winner}. Honest result on unseen months: "
+    print(f"\nWinner (picked on months before the holdout only): {winner}. Honest result on unseen months: "
           f"{table.loc[winner, 'holdout']:.1%} of money at risk from {share:.0%} of orders")
     print(f"LightGBM PR-AUC on unseen months: {pr_auc:.3f} (random would score {base:.3f}, "
           f"so {pr_auc / base:.1f}x better than chance)")

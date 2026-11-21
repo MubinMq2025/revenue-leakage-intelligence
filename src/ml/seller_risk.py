@@ -56,7 +56,10 @@ def lightgbm_scores(train: pd.DataFrame, snap: pd.DataFrame, cfg: dict, variant:
     """Predicted money at risk over the next 3 months, learned from past snapshots."""
     import lightgbm as lgb
 
-    model = lgb.LGBMRegressor(**cfg[variant]["params"], random_state=cfg["random_state"])
+    # Fixed row order: bagging picks rows by position (see order_risk.train_model)
+    train = train.sort_values(["snapshot", "seller_id"], kind="mergesort").reset_index(drop=True)
+    model = lgb.LGBMRegressor(**cfg[variant]["params"], random_state=cfg["random_state"], deterministic=True,
+                              force_row_wise=True, n_jobs=1)
     model.fit(model_matrix(train, FEATURE_COLUMNS, cfg["log_columns"]), train["future_at_risk_rs"])
     return model.predict(model_matrix(snap, FEATURE_COLUMNS, cfg["log_columns"]))
 
