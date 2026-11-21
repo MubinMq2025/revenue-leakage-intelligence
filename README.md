@@ -1,6 +1,6 @@
 # Revenue Leakage Intelligence
 
-Their dashboards describe the past. Ours also predicts, explains and monitors itself.
+The scope of this dashboard is not limited to viewing historic data. Ours also predicts, explains and monitors itself.
 
 ## The Problem
 
